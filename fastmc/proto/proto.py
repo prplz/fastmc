@@ -27,15 +27,15 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import re
-import os
 import logging
-
+import os
+import re
 from array import array
-from struct import pack, unpack, Struct
-from collections import namedtuple
 from cStringIO import StringIO
+from collections import namedtuple
 from itertools import izip
+from struct import pack, unpack, Struct
+
 from simplejson import loads as json_loads, dumps as json_dumps
 
 log = logging.getLogger(__name__)
@@ -44,14 +44,15 @@ OPTIMIZE = not bool(os.getenv("FASTMC_NO_OPTIMIZE"))
 DEBUG_PARSER = bool(os.getenv("FASTMC_DEBUG_PARSER"))
 DEBUG_PACKET = bool(os.getenv("FASTMC_DEBUG_PACKET"))
 
+
 class ReadBuffer(object):
     __slots__ = [
-        "_max_size", 
+        "_max_size",
         "_buffer_trunc",
-        "_buffer_tell", 
-        "_buffer_read", 
-        "_buffer_write", 
-        "_buffer_seek", 
+        "_buffer_tell",
+        "_buffer_read",
+        "_buffer_write",
+        "_buffer_seek",
     ]
 
     def __init__(self, data=""):
@@ -88,7 +89,9 @@ class ReadBuffer(object):
     def restore(self, read_pos):
         self._buffer_seek(read_pos, 0)
 
+
 WriteBuffer = StringIO
+
 
 def read_varint(b):
     byte = b.read(1)
@@ -107,15 +110,19 @@ def read_varint(b):
         if not quantum & 0x80:
             break
     return value
+
+
 def write_varint(b, value):
-    if value <= 127: # fast path
+    if value <= 127:  # fast path
         b.write(chr(value))
     else:
-        shifted_value = True # dummy initialized
+        shifted_value = True  # dummy initialized
         while shifted_value:
             shifted_value = value >> 7
             b.write(chr((value & 0x7f) | (0x80 if shifted_value else 0)))
             value = shifted_value
+
+
 def size_varint(value):
     size = 1
     while value & ~0x7f:
@@ -123,179 +130,262 @@ def size_varint(value):
         value >>= 7
     return size
 
+
 Position = namedtuple("Position", "x y z")
+
 
 def read_position(b):
     x = read_int(b)
     y = read_ubyte(b)
     z = read_int(b)
     return Position(x, y, z)
+
+
 def write_position(b, pos):
     write_int(b, pos.x)
     write_ubyte(b, pos.y)
     write_int(b, pos.z)
 
+
 def read_position_packed(b):
     # most retarded protocol encoding ever to save
     # a few bytes in a data type that's rarly used.
     p = read_ulong(b)
+
     def twentysix_bit_2_complement(v):
         if v & 0x2000000:
             v = v - (1 << 26)
         return v
+
     return Position(
-        twentysix_bit_2_complement(p >> 38), 
-        (p >> 26) & 0xfff, 
+        twentysix_bit_2_complement(p >> 38),
+        (p >> 26) & 0xfff,
         twentysix_bit_2_complement(p & 0x3ffffff)
     )
+
+
 def write_position_packed(b, pos):
     write_ulong(b, (pos.x & 0x3ffffff) << 38 | pos.y << 26 | pos.z & 0x3ffffff)
+
 
 def read_short_string(b):
     size = read_short(b)
     string = b.read(size)
     return string.decode("utf8")
+
+
 def write_short_string(b, string):
     encoded = string.encode("utf8")
     write_short(b, len(encoded))
     b.write(encoded)
 
+
 def read_string(b):
     size = read_varint(b)
     string = b.read(size)
     return string.decode("utf8")
+
+
 def write_string(b, string):
     encoded = string.encode("utf8")
     write_varint(b, len(encoded))
     b.write(encoded)
+
 
 def read_bytes_exhaustive(b):
     # ugly hack for plugin message in protocol version 47:
     # The value doesn't have a size prefix, so you have to
     # to read all remaining bytes here. *barf*
     return b.read(10000000000)
+
+
 def write_bytes_exhaustive(b, string):
     b.write(string)
 
+
 def read_json(b):
     return json_loads(read_string(b))
+
+
 def write_json(b, value):
     return write_string(b, json_dumps(value, separators=(',', ':')))
 
+
 def read_ushort(b):
     return unpack(">H", b.read(2))[0]
+
+
 def write_ushort(b, value):
     return b.write(pack(">H", value))
 
+
 def read_short(b):
     return unpack(">h", b.read(2))[0]
+
+
 def write_short(b, value):
     return b.write(pack(">h", value))
 
+
 def read_long(b):
     return unpack(">q", b.read(8))[0]
+
+
 def write_long(b, value):
     return b.write(pack(">q", value))
 
+
 def read_ulong(b):
     return unpack(">Q", b.read(8))[0]
+
+
 def write_ulong(b, value):
     return b.write(pack(">Q", value))
 
+
 def read_ubyte(b):
     return ord(b.read(1))
+
+
 def write_ubyte(b, value):
     return b.write(chr(value))
 
+
 def read_byte(b):
     return unpack(">b", b.read(1))[0]
+
+
 def write_byte(b, value):
     return b.write(pack(">b", value))
 
+
 def read_bool(b):
     return b.read(1) == '\x01'
+
+
 def write_bool(b, value):
     return b.write('\x01' if value else '\x00')
 
+
 def read_float(b):
     return unpack(">f", b.read(4))[0]
+
+
 def write_float(b, value):
     return b.write(pack(">f", value))
 
+
 def read_double(b):
     return unpack(">d", b.read(8))[0]
+
+
 def write_double(b, value):
     return b.write(pack(">d", value))
 
+
 def read_int(b):
     return unpack(">i", b.read(4))[0]
+
+
 def write_int(b, value):
     return b.write(pack(">i", value))
 
+
 def read_uint(b):
     return unpack(">I", b.read(4))[0]
+
+
 def write_uint(b, value):
     return b.write(pack(">I", value))
 
+
 def read_int8(b):
     return read_int(b) / 8.0
+
+
 def write_int8(b, value):
     write_int(b, int(value * 8))
 
+
 def read_int32(b):
     return read_int(b) / 32.0
+
+
 def write_int32(b, value):
     write_int(b, int(value * 32))
 
+
 def read_byte32(b):
     return read_byte(b) / 32.0
+
+
 def write_byte32(b, value):
     write_byte(b, int(value * 32))
+
 
 def read_short_byte_array(b):
     size = read_short(b)
     return b.read(size)
+
+
 def write_short_byte_array(b, value):
     write_short(b, len(value))
     b.write(value)
 
+
 def read_int_byte_array(b):
     size = read_int(b)
     return b.read(size)
+
+
 def write_int_byte_array(b, value):
     write_int(b, len(value))
     b.write(value)
 
+
 def read_varint_byte_array(b):
     size = read_varint(b)
     return b.read(size)
+
+
 def write_varint_byte_array(b, value):
     write_varint(b, len(value))
     b.write(value)
 
+
 PlayerData = namedtuple("PlayerData", "name value signature")
+
+
 def read_player_data(b):
     return PlayerData(
         read_string(b),
         read_string(b),
         read_string(b),
     )
+
+
 def write_player_data(b, pd):
     write_string(b, pd.name)
     write_string(b, pd.value)
     write_string(b, pd.signature)
 
+
 def make_array_reader(count_reader, record_reader):
     def reader(b):
         size = count_reader(b)
         return [record_reader(b) for _ in xrange(size)]
+
     return reader
+
+
 def make_array_writer(count_writer, record_writer):
     def writer(b, array):
         count_writer(b, len(array))
         for value in array:
             record_writer(b, value)
+
     return writer
+
 
 read_byte_int_array = make_array_reader(read_byte, read_int)
 write_byte_int_array = make_array_writer(write_byte, write_int)
@@ -315,11 +405,13 @@ read_varint_player_data_array = make_array_reader(read_varint, read_player_data)
 write_varint_player_data_array = make_array_writer(write_varint, write_player_data)
 
 Slot = namedtuple("Slot", "item_id count damage nbt")
+
+
 def read_slot(b):
     item_id = read_short(b)
     if item_id == -1:
         return None
-    count = read_byte(b) 
+    count = read_byte(b)
     damage = read_short(b)
     nbt_size = read_short(b)
     if nbt_size != -1:
@@ -327,6 +419,8 @@ def read_slot(b):
     else:
         nbt = None
     return Slot(item_id, count, damage, nbt)
+
+
 def write_slot(b, slot):
     if slot is None:
         write_short(b, -1)
@@ -340,19 +434,23 @@ def write_slot(b, slot):
     else:
         write_short(b, -1)
 
+
 read_slot_array = make_array_reader(read_short, read_slot)
 write_slot_array = make_array_writer(write_short, write_slot)
+
 
 def read_slot_1_8(b):
     item_id = read_short(b)
     if item_id == -1:
         return None
-    count = read_byte(b) 
+    count = read_byte(b)
     damage = read_short(b)
     name, nbt = read_nbt(b)
     if nbt.tag_type == NbtTag.END:
         nbt = None
     return Slot(item_id, count, damage, nbt)
+
+
 def write_slot_1_8(b, slot):
     if slot is None:
         write_short(b, -1)
@@ -365,21 +463,28 @@ def write_slot_1_8(b, slot):
     else:
         write_nbt(b, NBT('', slot.nbt))
 
+
 read_slot_array_1_8 = make_array_reader(read_short, read_slot_1_8)
 write_slot_array_1_8 = make_array_writer(write_short, write_slot_1_8)
+
 
 def read_changes(b):
     count = read_short(b)
     size = read_int(b)
     assert size == count * 4
     return [read_uint(b) for _ in xrange(count)]
+
+
 def write_changes(b, changes):
     write_short(b, len(changes))
-    write_int(b, len(changes)*4)
+    write_int(b, len(changes) * 4)
     for change in changes:
         write_uint(b, change)
 
+
 BlockChange = namedtuple("BlockChange", "x y z block_id")
+
+
 def read_changes_14w26c(b):
     def read_change(b):
         coords = read_ushort(b)
@@ -387,40 +492,55 @@ def read_changes_14w26c(b):
         return BlockChange(
             (coords >> 12) & 0xF,
             coords & 0xFF,
-            (coords >>  8) & 0xF,
+            (coords >> 8) & 0xF,
             block_id,
         )
+
     count = read_varint(b)
     return [read_change(b) for _ in xrange(count)]
+
+
 def write_changes_14w26c(b, changes):
     def write_change(b, change):
         write_ushort(b, change.y | change.z << 8 | change.x << 12)
         write_varint(b, change.block_id)
+
     write_varint(b, len(changes))
     for change in changes:
         write_change(b, change)
 
+
 Vector = namedtuple("Vector", "x y z")
+
+
 def read_vector(b):
     x = read_int(b)
     y = read_int(b)
     z = read_int(b)
     return Vector(x, y, z)
+
+
 def write_vector(b, value):
     write_int(b, value.x)
     write_int(b, value.y)
     write_int(b, value.z)
 
+
 Rotation = namedtuple("Rotation", "pitch roll yaw")
+
+
 def read_rotation(b):
     pitch = read_float(b)
     roll = read_float(b)
     yaw = read_float(b)
     return Rotation(pitch, roll, yaw)
+
+
 def write_rotation(b, value):
     write_float(b, value.pitch)
     write_float(b, value.roll)
     write_float(b, value.yaw)
+
 
 def make_metadata_pair(readers, writers):
     def read_metadata(b):
@@ -431,12 +551,15 @@ def make_metadata_pair(readers, writers):
                 return meta
             meta_type = item >> 5
             meta[item & 0x1f] = meta_type, readers[meta_type](b)
+
     def write_metadata(b, meta):
         for index, (meta_type, meta_value) in meta.iteritems():
             write_ubyte(b, meta_type << 5 | index & 0x1f)
             writers[meta_type](b, meta_value)
         write_ubyte(b, 0x7f)
+
     return read_metadata, write_metadata
+
 
 META_READERS = {
     0: read_byte,
@@ -482,6 +605,8 @@ read_metadata_1_8, write_metadata_1_8 = make_metadata_pair(META_READERS_1_8, MET
 
 Property = namedtuple("Property", "value modifiers")
 Modifier = namedtuple("Modifier", "uuid amount operation")
+
+
 def read_property_array(b):
     properties = {}
     num_properties = read_int(b)
@@ -494,18 +619,21 @@ def read_property_array(b):
             modifiers.append(Modifier(msl << 64 | lsl, amount, operation))
         properties[key] = Property(value, modifiers)
     return properties
+
+
 def write_property_array(b, properties):
     write_int(b, len(properties))
     for key, property in properties.iteritems():
         write_string(b, key)
         b.write(pack(">dh", property.value, len(property.modifiers)))
         for modifier in property.modifiers:
-            b.write(pack(">QQdb", 
-                modifier.uuid >> 64,
-                modifier.uuid & 0xffffffffffffffff,
-                modifier.amount,
-                modifier.operation
-            ))
+            b.write(pack(">QQdb",
+                         modifier.uuid >> 64,
+                         modifier.uuid & 0xffffffffffffffff,
+                         modifier.amount,
+                         modifier.operation
+                         ))
+
 
 def read_property_array_14w04a(b):
     properties = {}
@@ -520,6 +648,8 @@ def read_property_array_14w04a(b):
             modifiers.append(Modifier(msl << 64 | lsl, amount, operation))
         properties[key] = Property(value, modifiers)
     return properties
+
+
 def write_property_array_14w04a(b, properties):
     write_int(b, len(properties))
     for key, property in properties.iteritems():
@@ -527,21 +657,27 @@ def write_property_array_14w04a(b, properties):
         write_double(b, property.value)
         write_varint(b, len(property.modifiers))
         for modifier in property.modifiers:
-            b.write(pack(">QQdb", 
-                modifier.uuid >> 64,
-                modifier.uuid & 0xffffffffffffffff,
-                modifier.amount,
-                modifier.operation
-            ))
+            b.write(pack(">QQdb",
+                         modifier.uuid >> 64,
+                         modifier.uuid & 0xffffffffffffffff,
+                         modifier.amount,
+                         modifier.operation
+                         ))
+
 
 def read_uuid(b):
     msl, lsl = unpack(">QQ", b.read(16))
     return msl << 64 | lsl
+
+
 def write_uuid(b, uuid):
     b.write(pack(">QQ", uuid >> 64, uuid & 0xffffffffffffffff))
 
+
 SpeedVector = namedtuple("SpeedVector", "x y z")
 ObjectData = namedtuple("ObjectData", "int_val speed")
+
+
 def read_objdata(b):
     int_val = read_int(b)
     if int_val > 0:
@@ -549,14 +685,17 @@ def read_objdata(b):
     else:
         speed = None
     return ObjectData(int_val, speed)
+
+
 def write_objdata(b, value):
     write_int(b, value.int_val)
     if value.int_val > 0:
         b.write(pack(">hhh",
-            value.speed.x,
-            value.speed.y,
-            value.speed.z,
-        ))
+                     value.speed.x,
+                     value.speed.y,
+                     value.speed.z,
+                     ))
+
 
 def read_statistic_array(b):
     size = read_varint(b)
@@ -566,28 +705,38 @@ def read_statistic_array(b):
         amount = read_varint(b)
         stats.append((name, amount))
     return stats
+
+
 def write_statistic_array(b, value):
     write_varint(b, len(value))
     for name, amount in value:
         write_string(b, name)
         write_varint(b, amount)
 
+
 ExplosionRecord = namedtuple("ExplosionRecord", "x y z")
 ExplosionFmt = Struct(">bbb")
+
+
 def read_explosions(b):
     explosions = []
     count = read_int(b)
     coords = b.read(3 * count)
-    for i in xrange(0, count*3, 3):
-        explosions.append(ExplosionRecord(*ExplosionFmt.unpack(coords[i:i+3])))
+    for i in xrange(0, count * 3, 3):
+        explosions.append(ExplosionRecord(*ExplosionFmt.unpack(coords[i:i + 3])))
     return explosions
+
+
 def write_explosions(b, explosions):
     write_int(b, len(explosions))
     for record in explosions:
         b.write(ExplosionFmt.pack(record.x, record.y, record.z))
 
+
 ChunkBulk = namedtuple("ChunkBulk", "sky_light_sent compressed_data chunks")
 Chunk = namedtuple("Chunk", "x z primary_bitmap add_bitmap")
+
+
 def read_map_chunk_bulk(b):
     num_chunks = read_short(b)
     data_size = read_int(b)
@@ -601,6 +750,8 @@ def read_map_chunk_bulk(b):
         add_bitmap = read_ushort(b)
         chunks.append(Chunk(chunk_x, chunk_z, primary_bitmap, add_bitmap))
     return ChunkBulk(sky_light_sent, compressed_data, chunks)
+
+
 def write_map_chunk_bulk(b, bulk):
     write_short(b, len(bulk.chunks))
     write_int(b, len(bulk.compressed_data))
@@ -612,11 +763,15 @@ def write_map_chunk_bulk(b, bulk):
         write_ushort(b, chunk.primary_bitmap)
         write_ushort(b, chunk.add_bitmap)
 
+
 ChunkBulk14w28a = namedtuple("ChunkBulk14w28a", "sky_light_sent data chunks")
 Chunk14w28a = namedtuple("Chunk14w28a", "x z primary_bitmap data_offset")
+
+
 def read_map_chunk_bulk_14w28a(b):
     def count_bits(v):
-        return bin(v).count("1") # yep
+        return bin(v).count("1")  # yep
+
     sky_light_sent = read_bool(b)
     num_chunks = read_varint(b)
     chunks = []
@@ -628,15 +783,17 @@ def read_map_chunk_bulk_14w28a(b):
         chunks.append(Chunk14w28a(chunk_x, chunk_z, primary_bitmap, data_offset))
 
         num_chunks = count_bits(primary_bitmap)
-        data_offset += 16*16*16 * 2 * num_chunks      # block data
-        data_offset += 16*16*16 / 2 * num_chunks      # block light
+        data_offset += 16 * 16 * 16 * 2 * num_chunks  # block data
+        data_offset += 16 * 16 * 16 / 2 * num_chunks  # block light
         if sky_light_sent:
-            data_offset += 16*16*16 / 2 * num_chunks  # sky light
-        data_offset += 16*16                          # biome data
+            data_offset += 16 * 16 * 16 / 2 * num_chunks  # sky light
+        data_offset += 16 * 16  # biome data
 
     data = b.read(data_offset)
     assert len(data) == data_offset
     return ChunkBulk14w28a(sky_light_sent, buffer(data, 0, data_offset), chunks)
+
+
 def write_map_chunk_bulk_14w28a(b, bulk):
     write_bool(b, bulk.sky_light_sent)
     write_varint(b, len(bulk.chunks))
@@ -646,24 +803,31 @@ def write_map_chunk_bulk_14w28a(b, bulk):
         write_ushort(b, chunk.primary_bitmap)
     b.write(bulk.data)
 
+
 MapIcon = namedtuple("MapIcon", "direction type x y")
+
+
 def read_map_icons(b):
     def read_icon(b):
         dir_type = read_byte(b)
         x = read_byte(b)
         y = read_byte(b)
         return MapIcon(dir_type >> 4, dir_type & 0xF, x, y)
+
     num_icons = read_varint(b)
     icons = []
     for n in xrange(num_icons):
         icons.append(read_icon(b))
     return icons
+
+
 def write_map_icons(b, icons):
     write_varint(b, len(icons))
     for icon in icons:
         write_byte(b, icon.direction << 4 | icon.type)
         write_byte(b, icon.x)
         write_byte(b, icon.y)
+
 
 PlayerListActions = namedtuple("PlayerListAction", "action players")
 LIST_ACTION_ADD_PLAYER = 0
@@ -681,6 +845,7 @@ PlayerListActionDisplayName = namedtuple("PlayerListActionDisplayName", "uuid di
 
 LIST_ACTION_REMOVE_PLAYER = 4
 PlayerListActionRemove = namedtuple("PlayerListActionRemove", "uuid")
+
 
 def read_list_actions(b):
     action = read_varint(b)
@@ -731,6 +896,8 @@ def read_list_actions(b):
         else:
             raise ValueError("invalid player list action")
     return PlayerListActions(action, players)
+
+
 def write_list_actions(b, actions):
     write_varint(b, actions.action)
     write_varint(b, len(actions.players))
@@ -766,6 +933,7 @@ def write_list_actions(b, actions):
         else:
             raise ValueError("invalid player list action")
 
+
 class NbtTag(namedtuple('NbtTag', 'tag_type value')):
     END = 0
     BYTE = 1
@@ -779,21 +947,27 @@ class NbtTag(namedtuple('NbtTag', 'tag_type value')):
     LIST = 9
     COMPOUND = 10
     INT_ARRAY = 11
+
+
 NbtList = namedtuple('NbtList', 'tag_type values')
 NBT = namedtuple('NBT', 'name root')
+
 
 def read_nbt(b):
     def read_nbt_byte_array(b):
         length = read_int(b)
         return array('b', unpack(">%db" % length, b.read(length)))
+
     def read_nbt_int_array(b):
         length = read_int(b)
         return array('i', unpack(">%di" % length, b.read(length * 4)))
+
     def read_nbt_list(b):
         tag_type = read_byte(b)
         decoder = TAG_TYPES[tag_type]
         length = read_int(b)
         return NbtList(tag_type, [decoder(b) for _ in xrange(length)])
+
     def read_nbt_compound(b):
         out = {}
         while 1:
@@ -802,6 +976,7 @@ def read_nbt(b):
                 break
             out[name] = nbt_tag
         return out
+
     def read_nbt_tag(b):
         tag_type = read_byte(b)
         if tag_type == NbtTag.END:
@@ -811,6 +986,7 @@ def read_nbt(b):
             name = read_short_string(b)
             value = TAG_TYPES[tag_type](b)
         return name, NbtTag(tag_type, value)
+
     TAG_TYPES = {
         NbtTag.END: lambda b: None,
         NbtTag.BYTE: read_byte,
@@ -829,28 +1005,34 @@ def read_nbt(b):
     # assert nbt_tag.tag_type == NbtTag.COMPOUND
     return NBT(name, nbt_tag)
 
+
 def write_nbt(b, nbt):
     def write_nbt_byte_array(b, values):
         write_int(b, len(values))
         b.write(pack(">%db" % len(values), *values))
+
     def write_nbt_int_array(b, values):
         write_int(b, len(values))
         b.write(pack(">%di" % len(values), *values))
+
     def write_nbt_list(b, nbt_list):
         write_byte(b, nbt_list.tag_type)
         write_int(b, len(nbt_list.values))
         encoder = TAG_TYPES[nbt_list.tag_type]
         for value in nbt_list.values:
             encoder(b, value)
+
     def write_nbt_compound(b, values):
         for name, nbt_tag in values.iteritems():
             write_nbt_tag(b, name, nbt_tag)
         write_byte(b, NbtTag.END)
+
     def write_nbt_tag(b, name, nbt_tag):
         assert nbt_tag.tag_type != NbtTag.END
         write_byte(b, nbt_tag.tag_type)
         write_short_string(b, name)
         TAG_TYPES[nbt_tag.tag_type](b, nbt_tag.value)
+
     TAG_TYPES = {
         NbtTag.END: lambda b: None,
         NbtTag.BYTE: write_byte,
@@ -866,6 +1048,7 @@ def write_nbt(b, nbt):
         NbtTag.INT_ARRAY: write_nbt_int_array,
     }
     write_nbt_tag(b, nbt.name, nbt.root)
+
 
 def read_raw(b, compression_threshold):
     ss = b.snapshot()
@@ -886,7 +1069,7 @@ def read_raw(b, compression_threshold):
             b.restore(ss)
             return None
 
-        if data_length == 0: # uncompressed
+        if data_length == 0:  # uncompressed
             if len(data) >= compression_threshold:
                 raise ValueError("packet is uncompressed despite being larger than %d" % compression_threshold)
             return StringIO(data)
@@ -903,6 +1086,7 @@ def read_raw(b, compression_threshold):
             b.restore(ss)
             return None
         return StringIO(data)
+
 
 def write_packet(b, pkt, compression_threshold):
     raw = StringIO()
@@ -925,21 +1109,24 @@ def write_packet(b, pkt, compression_threshold):
         write_varint(b, 0)
         b.write(data)
 
+
 PROTOCOL_LINE = re.compile(r"(\w+)\s+(\w+)(?:\s+(.*))?").match
 PRIMITIVES = {
-    'byte':     ('b', 1, None,          None),
-    'ubyte':    ('B', 1, None,          None),
-    'bool':     ('?', 1, None,          None),
-    'short':    ('h', 2, None,          None),
-    'ushort':   ('H', 2, None,          None),
-    'int':      ('i', 4, None,          None),
-    'long':     ('q', 8, None,          None),
-    'float':    ('f', 4, None,          None),
-    'double':   ('d', 8, None,          None),
-    'int8':     ('i', 4, "%s / 8.0",    "int(%s * 8)"),
-    'int32':    ('i', 4, "%s / 32.0",   "int(%s * 32)"),
-    'byte32':   ('b', 1, "%s / 32.0",   "int(%s * 32)"),
+    'byte': ('b', 1, None, None),
+    'ubyte': ('B', 1, None, None),
+    'bool': ('?', 1, None, None),
+    'short': ('h', 2, None, None),
+    'ushort': ('H', 2, None, None),
+    'int': ('i', 4, None, None),
+    'long': ('q', 8, None, None),
+    'float': ('f', 4, None, None),
+    'double': ('d', 8, None, None),
+    'int8': ('i', 4, "%s / 8.0", "int(%s * 8)"),
+    'int32': ('i', 4, "%s / 32.0", "int(%s * 32)"),
+    'byte32': ('b', 1, "%s / 32.0", "int(%s * 32)"),
 }
+
+
 def make_packet_type(protocol_version, pkt_id, pkt_name, desc):
     def parse_fields():
         for line in desc.split("\n"):
@@ -952,12 +1139,16 @@ def make_packet_type(protocol_version, pkt_id, pkt_name, desc):
         def __init__(self):
             self._code = []
             self._depth = 0
+
         def add(self, line):
             self._code.append("%s%s" % (" " * (self._depth * 2), line))
+
         def indent(self):
             self._depth += 1
+
         def dedent(self):
             self._depth -= 1
+
         def get(self):
             return "\n".join(self._code)
 
@@ -995,7 +1186,7 @@ def make_packet_type(protocol_version, pkt_id, pkt_name, desc):
             code.add("_RUN_%d_PACK, _RUN_%d_UNPACK = _tmp.pack, _tmp.unpack" % (
                 run_idx, run_idx))
 
-    code.add("class %s(object):" % pkt_name) 
+    code.add("class %s(object):" % pkt_name)
     code.indent()
     if fields:
         code.add("__slots__ = %s" % (
@@ -1005,7 +1196,7 @@ def make_packet_type(protocol_version, pkt_id, pkt_name, desc):
     code.add("@classmethod")
     signature = ["cls"]
     signature.extend(
-        ("%s=None" if condition else "%s") % name 
+        ("%s=None" if condition else "%s") % name
         for name, parser, condition in fields
     )
     code.add("def create(%s):" % ", ".join(signature))
@@ -1033,7 +1224,7 @@ def make_packet_type(protocol_version, pkt_id, pkt_name, desc):
             for name, mod in izip(names, read_mods):
                 if mod:
                     code.add("self.%s = %s" % (
-                        name, 
+                        name,
                         mod % ("self.%s" % name)
                     ))
         else:
@@ -1062,7 +1253,7 @@ def make_packet_type(protocol_version, pkt_id, pkt_name, desc):
             for name, mod in izip(names, write_mods):
                 if mod:
                     code.add("%s = %s" % (
-                        name, 
+                        name,
                         mod % ("self.%s" % name)
                     ))
                     emit_names.append(name)
@@ -1089,8 +1280,8 @@ def make_packet_type(protocol_version, pkt_id, pkt_name, desc):
     code.add("out = []")
     code.add("out.append('%s (0x%02x)')" % (pkt_name, pkt_id))
     for name, parser, condition in fields:
-        code.add("out.append('  %s (%s%s)')" % (name, parser, 
-            " if %s" % condition if condition else ""))
+        code.add("out.append('  %s (%s%s)')" % (name, parser,
+                                                " if %s" % condition if condition else ""))
     code.add("return '\\n'.join(out)")
     code.dedent()
 
@@ -1104,8 +1295,8 @@ def make_packet_type(protocol_version, pkt_id, pkt_name, desc):
 
     if DEBUG_PARSER:
         print "--[ %s / protocol version %d ]-----------------------" % (pkt_name, protocol_version)
-        print "\n".join("%3d %s" % (num+1, line) 
-            for num, line in enumerate(code.get().split("\n")))
+        print "\n".join("%3d %s" % (num + 1, line)
+                        for num, line in enumerate(code.get().split("\n")))
         print
 
     compiled = compile(code.get(), "%s:%s(0x%x)@%d" % (__file__, pkt_name, pkt_id, protocol_version), 'exec')
@@ -1136,7 +1327,7 @@ class Protocol(object):
     def __init__(self, protocol_version):
         self._protocol_version = protocol_version
         self._name = None
-        self._states = {} # state, side, pkt_id
+        self._states = {}  # state, side, pkt_id
 
     def based_on(self, other_protocol_version):
         other_protocol = ProtocolVersion[other_protocol_version]
@@ -1173,7 +1364,7 @@ class Protocol(object):
         return "# protocol %d (%s)\n\n%s\n" % (
             self._protocol_version, self._name,
             "\n".join("- STATE %s:\n=================\n\n%s" % (
-                STATES[state], 
+                STATES[state],
                 "\n".join("  %s:\n  ---------------\n\n%s\n" % (
                     SIDES[side],
                     "\n".join("+ %s\n" % (
@@ -1204,8 +1395,8 @@ class _Side(object):
         self._side = side
 
     def __call__(self, pkt_id, pkt_name, desc=""):
-        self._protocol.add_packet(self._state, self._side, 
-            make_packet_type(self._protocol.version, pkt_id, pkt_name, desc))
+        self._protocol.add_packet(self._state, self._side,
+                                  make_packet_type(self._protocol.version, pkt_id, pkt_name, desc))
 
 
 class Endpoint(object):
@@ -1225,7 +1416,7 @@ class Endpoint(object):
     def from_client(cls, protocol_version):
         return cls(protocol_version, SERVERBOUND)
 
-    to_client = from_server 
+    to_client = from_server
     to_server = from_client
 
     def __init__(self, protocol_version, side):
@@ -1270,6 +1461,7 @@ class Endpoint(object):
 
     def write_pkt(self, buf, pkt):
         write_packet(buf, pkt, self._compression_threshold)
+
 
 class MinecraftSocket(object):
     def __init__(self, sock):
@@ -1322,1020 +1514,3 @@ LOGIN = 2
 PLAY = 3
 
 STATES = "Handshake", "Status", "Login", "Play"
-
-protocol(0).set_name("13w42a")
-
-############################################### Handshake
-protocol(0).state(HANDSHAKE).from_client(0x00, "Handshake", """
-    version         varint
-    addr            string 
-    port            ushort
-    state           varint
-""")
-
-############################################### Status
-protocol(0).state(STATUS).from_server(0x00, "Response", """
-    response        json
-""")
-protocol(0).state(STATUS).from_server(0x01, "Ping", """
-    time            long
-""")
-#---------------------------------------------------
-protocol(0).state(STATUS).from_client(0x00, "Request")
-protocol(0).state(STATUS).from_client(0x01, "Ping", """
-    time            long
-""")
-
-############################################### Login
-protocol(0).state(LOGIN).from_server(0x00, "Disconnect", """
-    reason          json
-""")
-protocol(0).state(LOGIN).from_server(0x01, "EncryptionRequest", """
-    server_id       string
-    public_key      short_byte_array
-    challenge_token short_byte_array
-""")
-protocol(0).state(LOGIN).from_server(0x02, "LoginSuccess", """
-    uuid            string
-    username        string
-""")
-#---------------------------------------------------
-protocol(0).state(LOGIN).from_client(0x00, "LoginStart", """
-    name            string
-""")
-protocol(0).state(LOGIN).from_client(0x01, "EncryptionResponse", """
-    shared_secret   short_byte_array
-    response_token  short_byte_array
-""")
-
-############################################### Play
-protocol(0).state(PLAY).from_server(0x00, "KeepAlive", """
-    keepalive_id    int 
-""")
-protocol(0).state(PLAY).from_server(0x01, "JoinGame", """
-    eid             int
-    game_mode       ubyte
-    dimension       byte
-    difficulty      ubyte
-    max_players     ubyte
-    level_type      string
-""")
-protocol(0).state(PLAY).from_server(0x02, "ChatMesage", """
-    chat            json
-""")
-protocol(0).state(PLAY).from_server(0x03, "TimeUpdate", """
-    world_age       long
-    time_of_day     long
-""")
-protocol(0).state(PLAY).from_server(0x04, "EntityEquipment", """
-    eid             int
-    slot            short
-    item            slot
-""")
-protocol(0).state(PLAY).from_server(0x05, "SpawnPosition", """
-    x               int
-    y               int
-    z               int
-""")
-protocol(0).state(PLAY).from_server(0x06, "HealthUpdate", """
-    health          float
-    food            short
-    food_saturation float
-""")
-protocol(0).state(PLAY).from_server(0x07, "Respawn", """
-    dimension       int
-    difficulty      ubyte
-    game_mode       ubyte
-    level_type      string
-""")
-protocol(0).state(PLAY).from_server(0x08, "PlayerPositionAndLook", """
-    x               double
-    y               double
-    z               double
-    yaw             float
-    pitch           float
-    on_ground       bool
-""")
-protocol(0).state(PLAY).from_server(0x09, "HeldItemChange", """
-    slot            byte
-""")
-protocol(0).state(PLAY).from_server(0x0a, "UseBed", """
-    eid             int
-    x               int
-    y               byte
-    z               int
-""")
-protocol(0).state(PLAY).from_server(0x0b, "Animation", """
-    eid             varint
-    animation       ubyte
-""")
-protocol(0).state(PLAY).from_server(0x0c, "SpawnPlayer", """
-    eid             varint
-    uuid            string
-    name            string
-    x               int32
-    y               int32
-    z               int32
-    yaw             ubyte
-    pitch           ubyte
-    current_item    short
-    metadata        metadata
-""")
-protocol(0).state(PLAY).from_server(0x0d, "CollectItem", """
-    collected_eid   int
-    collector_eid   int
-""")
-protocol(0).state(PLAY).from_server(0x0e, "SpawnObject", """
-    eid             varint
-    type            byte
-    x               int32
-    y               int32
-    z               int32
-    pitch           ubyte
-    yaw             ubyte
-    data            objdata
-""")
-protocol(0).state(PLAY).from_server(0x0f, "SpawnMob", """
-    eid             varint
-    type            ubyte
-    x               int32
-    y               int32
-    z               int32
-    pitch           ubyte
-    head_pitch      ubyte
-    yaw             ubyte
-    velocity_x      short
-    velocity_y      short
-    velocity_z      short
-    metadata        metadata
-""")
-protocol(0).state(PLAY).from_server(0x10, "SpawnPainting", """
-    eid             varint
-    title           string
-    x               int
-    y               int
-    z               int
-    direction       int
-""")
-protocol(0).state(PLAY).from_server(0x11, "SpawnExperienceOrb", """
-    eid             varint
-    x               int32
-    y               int32
-    z               int32
-    count           short
-""")
-protocol(0).state(PLAY).from_server(0x12, "EntityVelocity", """
-    eid             int
-    velocity_x      short
-    velocity_y      short
-    velocity_z      short
-""")
-protocol(0).state(PLAY).from_server(0x13, "DestroyEntities", """
-    eids            byte_int_array
-""")
-protocol(0).state(PLAY).from_server(0x14, "Entity", """
-    eid             int
-""")
-protocol(0).state(PLAY).from_server(0x15, "EntityRelativeMove", """
-    eid             int
-    dx              byte32
-    dy              byte32
-    dz              byte32
-""")
-protocol(0).state(PLAY).from_server(0x16, "EntityLook", """
-    eid             int
-    yaw             ubyte
-    pitch           ubyte
-""")
-protocol(0).state(PLAY).from_server(0x17, "EntityLookAndRelativeMove", """
-    eid             int
-    dx              byte32
-    dy              byte32
-    dz              byte32
-    yaw             ubyte
-    pitch           ubyte
-""")
-protocol(0).state(PLAY).from_server(0x18, "EntityTeleport", """
-    eid             int
-    x               int32
-    y               int32
-    z               int32
-    yaw             ubyte
-    pitch           ubyte
-""")
-protocol(0).state(PLAY).from_server(0x19, "EntityHeadLook", """
-    eid             int
-    head_yaw        ubyte
-""")
-protocol(0).state(PLAY).from_server(0x1a, "EntityStatus", """
-    eid             int
-    status          byte
-""")
-protocol(0).state(PLAY).from_server(0x1b, "AttachEntity", """
-    eid             int
-    vehicle_id      int
-    leash           bool
-""")
-protocol(0).state(PLAY).from_server(0x1c, "EntityMetadata", """
-    eid             int
-    metadata        metadata
-""")
-protocol(0).state(PLAY).from_server(0x1d, "EntityEffect", """
-    eid             int
-    effect_id       byte
-    amplifier       byte
-    duration        short
-""")
-protocol(0).state(PLAY).from_server(0x1e, "RemoveEntityEffect", """
-    eid             int
-    effect_id       byte
-""")
-protocol(0).state(PLAY).from_server(0x1f, "SetExperience", """
-    bar             float
-    level           short
-    total_exp       short
-""")
-protocol(0).state(PLAY).from_server(0x20, "EntityProperty", """
-    eid             int
-    properties      property_array
-""")
-protocol(0).state(PLAY).from_server(0x21, "ChunkData", """
-    chunk_x         int
-    chunk_z         int
-    continuous      bool
-    chunk_bitmap    ushort
-    add_bitmap      ushort
-    compressed      int_byte_array
-""")
-protocol(0).state(PLAY).from_server(0x22, "MultiBlockChange", """
-    chunk_x         varint
-    chunk_z         varint
-    changes         changes
-""")
-protocol(0).state(PLAY).from_server(0x23, "BlockChange", """
-    x               int
-    y               ubyte
-    z               int
-    block_type      varint
-    block_data      ubyte
-""")
-protocol(0).state(PLAY).from_server(0x24, "BlockAction", """
-    x               int
-    y               short
-    z               int
-    b1              ubyte
-    b2              ubyte
-    block_type      varint
-""")
-protocol(0).state(PLAY).from_server(0x25, "BlockBreakAnimation", """
-    eid             varint
-    x               int
-    y               int
-    z               int
-    destroy_stage   byte
-""")
-protocol(0).state(PLAY).from_server(0x26, "MapChunkBulk", """
-    bulk            map_chunk_bulk
-""")
-protocol(0).state(PLAY).from_server(0x27, "Explosion", """
-    x               float
-    y               float
-    z               float
-    radius          float
-    records         explosions
-    motion_x        float
-    motion_y        float
-    motion_z        float
-""")
-protocol(0).state(PLAY).from_server(0x28, "Effect", """
-    effect_id       int
-    x               int
-    y               byte
-    z               int
-    data            int
-    constant_volume bool
-""")
-protocol(0).state(PLAY).from_server(0x29, "SoundEffect", """
-    sound           string
-    x               int8
-    y               int8
-    z               int8
-    volume          float
-    pitch           ubyte
-""")
-protocol(0).state(PLAY).from_server(0x2a, "Particle", """
-    particle        string
-    x               float
-    y               float
-    z               float
-    offset_x        float
-    offset_y        float
-    offset_z        float
-    speed           float
-    number          int
-""")
-protocol(0).state(PLAY).from_server(0x2b, "ChangeGameState", """
-    reason          ubyte
-    value           float
-""")
-protocol(0).state(PLAY).from_server(0x2c, "SpawnGlobalEntity", """
-    eid             varint
-    type            byte
-    x               int32
-    y               int32
-    z               int32
-""")
-protocol(0).state(PLAY).from_server(0x2d, "OpenWindow", """
-    window_id       ubyte
-    type            ubyte
-    title           string
-    slot_count      ubyte
-    use_title       bool
-    eid             int                 self.type == 11
-""")
-protocol(0).state(PLAY).from_server(0x2e, "CloseWindow", """
-    window_id       ubyte
-""")
-protocol(0).state(PLAY).from_server(0x2f, "SetSlot", """
-    window_id       ubyte
-    slot            short
-    item            slot
-""")
-protocol(0).state(PLAY).from_server(0x30, "WindowItem", """
-    window_id       ubyte
-    slots           slot_array
-""")
-protocol(0).state(PLAY).from_server(0x31, "WindowProperty", """
-    window_id       ubyte
-    property        short
-    value           short
-""")
-protocol(0).state(PLAY).from_server(0x32, "ConfirmTransaction", """
-    window_id       ubyte
-    action_num      short
-    accepted        bool
-""")
-protocol(0).state(PLAY).from_server(0x33, "UpdateSign", """
-    x               int
-    y               short
-    z               int
-    line1           string
-    line2           string
-    line3           string
-    line4           string
-""")
-protocol(0).state(PLAY).from_server(0x34, "Maps", """
-    map_id          varint
-    data            short_byte_array
-""")
-protocol(0).state(PLAY).from_server(0x35, "UpdateBlockEntity", """
-    x               int
-    y               short
-    z               int
-    action          ubyte
-    nbt             short_byte_array
-""")
-protocol(0).state(PLAY).from_server(0x36, "SignEditorOpen", """
-    x               int
-    y               int
-    z               int
-""")
-protocol(0).state(PLAY).from_server(0x37, "Statistics", """
-    stats           statistic_array
-""")
-protocol(0).state(PLAY).from_server(0x38, "PlayerListItem", """
-    name            string
-    online          bool
-    ping            short
-""")
-protocol(0).state(PLAY).from_server(0x39, "PlayerAbility", """
-    flags           byte
-    flying_speed    float
-    walking_speed   float
-""")
-protocol(0).state(PLAY).from_server(0x3a, "TabComplete", """
-    completions     varint_string_array
-""")
-protocol(0).state(PLAY).from_server(0x3b, "ScoreboardObjective", """
-    name            string
-    value           string
-    operation       byte
-""")
-protocol(0).state(PLAY).from_server(0x3c, "UpdateScore", """
-    name            string
-    remove          byte
-    score_name      string              self.remove != 1
-    value           int                 self.remove != 1
-""")
-protocol(0).state(PLAY).from_server(0x3d, "DisplayScoreboard", """
-    position        byte
-    score_name      string
-""")
-protocol(0).state(PLAY).from_server(0x3e, "Teams", """
-    team_name       string
-    mode            byte
-    display_name    string              self.mode == 0 or self.mode == 2
-    prefix          string              self.mode == 0 or self.mode == 2
-    suffix          string              self.mode == 0 or self.mode == 2
-    friendly_fire   byte                self.mode == 0 or self.mode == 2
-    players         short_string_array  self.mode in (0, 3, 4)
-""")
-protocol(0).state(PLAY).from_server(0x3f, "PluginMessage", """
-    channel         string
-    data            short_byte_array
-""")
-protocol(0).state(PLAY).from_server(0x40, "Disconnect", """
-    reason          json
-""")
-#---------------------------------------------------
-protocol(0).state(PLAY).from_client(0x00, "KeepAlive", """
-    keepalive_id    int 
-""")
-protocol(0).state(PLAY).from_client(0x01, "ChatMessage", """
-    chat            string
-""")
-protocol(0).state(PLAY).from_client(0x02, "UseEntity", """
-    target          int
-    button          byte
-""")
-protocol(0).state(PLAY).from_client(0x03, "Player", """
-    on_ground       bool
-""")
-protocol(0).state(PLAY).from_client(0x04, "PlayerPosition", """
-    x               double
-    y               double
-    stance          double
-    z               double
-    on_ground       bool
-""")
-protocol(0).state(PLAY).from_client(0x05, "PlayerLook", """
-    yaw             float
-    pitch           float
-    on_ground       bool
-""")
-protocol(0).state(PLAY).from_client(0x06, "PlayerPositionAndLook", """
-    x               double
-    y               double
-    stance          double
-    z               double
-    yaw             float
-    pitch           float
-    on_ground       bool
-""")
-protocol(0).state(PLAY).from_client(0x07, "PlayerDigging", """
-    status          byte
-    x               int
-    y               ubyte
-    z               int
-    face            byte
-""")
-protocol(0).state(PLAY).from_client(0x08, "BlockPlacement", """
-    x               int
-    y               ubyte
-    z               int
-    direction       byte
-    held_item       slot
-    cursor_x        byte
-    cursor_y        byte
-    cursor_z        byte
-""")
-protocol(0).state(PLAY).from_client(0x09, "HeldItemChange", """
-    slot            short
-""")
-protocol(0).state(PLAY).from_client(0x0a, "Animation", """
-    eid             int
-    animation       ubyte
-""")
-protocol(0).state(PLAY).from_client(0x0b, "EntityAction", """
-    eid             int
-    action_id       byte
-    jump_boost      int
-""")
-protocol(0).state(PLAY).from_client(0x0c, "SteerVehicle", """
-    sideways        float
-    forward         float
-    jump            bool
-    unmount         bool
-""")
-protocol(0).state(PLAY).from_client(0x0d, "CloseWindow", """
-    window_id       ubyte
-""")
-protocol(0).state(PLAY).from_client(0x0e, "ClickWindow", """
-    window_id       ubyte
-    slot            short
-    button          byte
-    action_num      short
-    mode            byte
-    clicked_item    slot
-""")
-protocol(0).state(PLAY).from_client(0x0f, "ConfirmTransaction", """
-    window_id       ubyte
-    action_num      short
-    accepted        bool
-""")
-protocol(0).state(PLAY).from_client(0x10, "CreativeInventoryAction", """
-    slot            short
-    clicked_item    slot
-""")
-protocol(0).state(PLAY).from_client(0x11, "EnchantItem", """
-    window_id       ubyte
-    enchantment     byte
-""")
-protocol(0).state(PLAY).from_client(0x12, "UpdateSign", """
-    x               int
-    y               short
-    z               int
-    line1           string
-    line2           string
-    line3           string
-    line4           string
-""")
-protocol(0).state(PLAY).from_client(0x13, "PlayerAbilities", """
-    flags           byte
-    flying_speed    float
-    walking_speed   float
-""")
-protocol(0).state(PLAY).from_client(0x14, "TabComplete", """
-    text            string
-""")
-protocol(0).state(PLAY).from_client(0x15, "ClientSettings", """
-    locale          string
-    view_distance   byte
-    chat_flags      byte
-    chat_colors     bool
-    difficulty      byte
-    show_cape       bool
-""")
-protocol(0).state(PLAY).from_client(0x16, "ClientStatus", """
-    action_id       byte
-""")
-protocol(0).state(PLAY).from_client(0x17, "PluginMessage", """
-    channel         string
-    data            short_byte_array
-""")
-
-protocol(1).set_name("13w42b")
-protocol(1).based_on(0)
-
-protocol(2).set_name("13w43a")
-protocol(2).based_on(1)
-
-protocol(3).set_name("1.7.1")
-protocol(3).based_on(2)
-
-#  __     ______     ___  
-# /_ |   |____  |   |__ \ 
-#  | |       / /       ) |
-#  | |      / /       / / 
-#  | | _   / /    _  / /_ 
-#  |_|(_) /_/    (_)|____|
-# 
-protocol(4).set_name("1.7.2")
-protocol(4).based_on(3)
-protocol(4).state(PLAY).from_server(0x22, "MultiBlockChange", """
-    chunk_x         int
-    chunk_z         int
-    changes         changes
-""")
-
-#  __     ______       __  
-# /_ |   |____  |     / /  
-#  | |       / /     / /_  
-#  | |      / /     | '_ \ 
-#  | | _   / /    _ | (_) |
-#  |_|(_) /_/    (_) \___/ 
-#
-protocol(5).set_name("1.7.6")
-protocol(5).based_on(4)
-protocol(5).state(PLAY).from_server(0x0c, "SpawnPlayer", """
-    eid             varint
-    uuid            string
-    name            string
-    data            varint_player_data_array
-    x               int32
-    y               int32
-    z               int32
-    yaw             ubyte
-    pitch           ubyte
-    current_item    short
-    metadata        metadata
-""")
-
-#   __      ___  
-#  /_ |    / _ \ 
-#   | |   | (_) |
-#   | |    > _ < 
-#   | | _ | (_) |
-#   |_|(_) \___/ 
-#
-protocol(47).set_name("1.8")
-protocol(47).based_on(5)
-############################################### Login
-protocol(47).state(LOGIN).from_server(0x01, "EncryptionRequest", """
-    server_id       string
-    public_key      varint_byte_array
-    challenge_token varint_byte_array
-""")
-protocol(47).state(LOGIN).from_server(0x03, "SetCompression", """
-    threshold       varint
-""")
-#---------------------------------------------------
-protocol(47).state(LOGIN).from_client(0x01, "EncryptionResponse", """
-    shared_secret   varint_byte_array
-    response_token  varint_byte_array
-""")
-############################################### Play
-protocol(47).state(PLAY).from_server(0x00, "KeepAlive", """
-    keepalive_id    varint 
-""")
-protocol(47).state(PLAY).from_server(0x01, "JoinGame", """
-    eid             int
-    game_mode       ubyte
-    dimension       byte
-    difficulty      ubyte
-    max_players     ubyte
-    level_type      string
-    reduced_debug   bool
-""")
-protocol(47).state(PLAY).from_server(0x02, "ChatMesage", """
-    chat            json
-    position        byte
-""")
-protocol(47).state(PLAY).from_server(0x04, "EntityEquipment", """
-    eid             varint
-    slot            short
-    item            slot_1_8
-""")
-protocol(47).state(PLAY).from_server(0x05, "SpawnPosition", """
-    location        position_packed
-""")
-protocol(47).state(PLAY).from_server(0x06, "HealthUpdate", """
-    health          float
-    food            varint
-    food_saturation float
-""")
-protocol(47).state(PLAY).from_server(0x08, "PlayerPositionAndLook", """
-    x               double
-    y               double
-    z               double
-    yaw             float
-    pitch           float
-    flag            byte
-""")
-protocol(47).state(PLAY).from_server(0x0a, "UseBed", """
-    eid             varint
-    location        position_packed
-""")
-protocol(47).state(PLAY).from_server(0x0c, "SpawnPlayer", """
-    eid             varint
-    uuid            uuid
-    x               int32
-    y               int32
-    z               int32
-    yaw             ubyte
-    pitch           ubyte
-    current_item    short
-    metadata        metadata_1_8
-""")
-protocol(47).state(PLAY).from_server(0x0d, "CollectItem", """
-    collected_eid   varint
-    collector_eid   varint
-""")
-protocol(47).state(PLAY).from_server(0x10, "SpawnPainting", """
-    eid             varint
-    title           string
-    location        position_packed
-    direction       ubyte
-""")
-protocol(47).state(PLAY).from_server(0x12, "EntityVelocity", """
-    eid             varint
-    velocity_x      short
-    velocity_y      short
-    velocity_z      short
-""")
-protocol(47).state(PLAY).from_server(0x13, "DestroyEntities", """
-    eids            varint_varint_array
-""")
-protocol(47).state(PLAY).from_server(0x14, "Entity", """
-    eid             varint
-""")
-protocol(47).state(PLAY).from_server(0x15, "EntityRelativeMove", """
-    eid             varint
-    dx              byte32
-    dy              byte32
-    dz              byte32
-    on_ground       bool
-""")
-protocol(47).state(PLAY).from_server(0x16, "EntityLook", """
-    eid             varint
-    yaw             ubyte
-    pitch           ubyte
-    on_ground       bool
-""")
-protocol(47).state(PLAY).from_server(0x17, "EntityLookAndRelativeMove", """
-    eid             varint
-    dx              byte32
-    dy              byte32
-    dz              byte32
-    yaw             ubyte
-    pitch           ubyte
-    on_ground       bool
-""")
-protocol(47).state(PLAY).from_server(0x18, "EntityTeleport", """
-    eid             varint
-    x               int32
-    y               int32
-    z               int32
-    yaw             ubyte
-    pitch           ubyte
-    on_ground       bool
-""")
-protocol(47).state(PLAY).from_server(0x19, "EntityHeadLook", """
-    eid             varint
-    head_yaw        ubyte
-""")
-protocol(47).state(PLAY).from_server(0x1c, "EntityMetadata", """
-    eid             varint
-    metadata        metadata_1_8
-""")
-protocol(47).state(PLAY).from_server(0x1d, "EntityEffect", """
-    eid             varint
-    effect_id       byte
-    amplifier       byte
-    duration        varint
-    hide_particles  bool
-""")
-protocol(47).state(PLAY).from_server(0x1e, "RemoveEntityEffect", """
-    eid             varint
-    effect_id       byte
-""")
-protocol(47).state(PLAY).from_server(0x1f, "SetExperience", """
-    bar             float
-    level           varint
-    total_exp       varint
-""")
-protocol(47).state(PLAY).from_server(0x20, "EntityProperty", """
-    eid             varint
-    properties      property_array_14w04a
-""")
-protocol(47).state(PLAY).from_server(0x21, "ChunkData", """
-    chunk_x         int
-    chunk_z         int
-    continuous      bool
-    primary_bitmap  ushort
-    data            varint_byte_array
-""")
-protocol(47).state(PLAY).from_server(0x22, "MultiBlockChange", """
-    chunk_x         int
-    chunk_z         int
-    changes         changes_14w26c
-""")
-protocol(47).state(PLAY).from_server(0x23, "BlockChange", """
-    location        position_packed
-    block_id        varint
-""")
-protocol(47).state(PLAY).from_server(0x24, "BlockAction", """
-    location        position_packed
-    b1              ubyte
-    b2              ubyte
-    block_type      varint
-""")
-protocol(47).state(PLAY).from_server(0x25, "BlockBreakAnimation", """
-    eid             varint
-    location        position_packed
-    destroy_stage   byte
-""")
-protocol(47).state(PLAY).from_server(0x26, "MapChunkBulk", """
-    bulk            map_chunk_bulk_14w28a
-""")
-protocol(47).state(PLAY).from_server(0x28, "Effect", """
-    effect_id       int
-    location        position_packed
-    data            int
-    constant_volume bool
-""")
-protocol(47).state(PLAY).from_server(0x2a, "Particle", """
-    particle_id     int
-    long_distance   bool
-    x               float
-    y               float
-    z               float
-    offset_x        float
-    offset_y        float
-    offset_z        float
-    speed           float
-    number          int
-    data            bytes_exhaustive    self.particle_id in (36, 37, 38)
-""")
-protocol(47).state(PLAY).from_server(0x2d, "OpenWindow", """
-    window_id       ubyte
-    type            string
-    title           json
-    slot_count      ubyte
-    eid             int                 self.type == "EntityHorse"
-""")
-protocol(47).state(PLAY).from_server(0x2f, "SetSlot", """
-    window_id       ubyte
-    slot            short
-    item            slot_1_8
-""")
-protocol(47).state(PLAY).from_server(0x30, "WindowItem", """
-    window_id       ubyte
-    slots           slot_array_1_8
-""")
-protocol(47).state(PLAY).from_server(0x33, "UpdateSign", """
-    location        position_packed
-    line1           json
-    line2           json
-    line3           json
-    line4           json
-""")
-protocol(47).state(PLAY).from_server(0x34, "Maps", """
-    map_id          varint
-    scale           byte
-    icons           map_icons
-    columns         ubyte
-    rows            ubyte               self.columns > 0
-    x               ubyte               self.columns > 0
-    y               ubyte               self.columns > 0
-    data            varint_byte_array   self.columns > 0
-""")
-protocol(47).state(PLAY).from_server(0x35, "UpdateBlockEntity", """
-    location        position_packed
-    action          ubyte
-    nbt             nbt
-""")
-protocol(47).state(PLAY).from_server(0x36, "SignEditorOpen", """
-    location        position_packed
-""")
-protocol(47).state(PLAY).from_server(0x38, "PlayerListItem", """
-    list_actions    list_actions 
-""")
-protocol(47).state(PLAY).from_server(0x3b, "ScoreboardObjective", """
-    name            string
-    mode            byte
-    value           string              self.mode == 0 or self.mode == 2
-    type            string              self.mode == 0 or self.mode == 2
-""")
-protocol(47).state(PLAY).from_server(0x3c, "UpdateScore", """
-    name            string
-    remove          byte
-    score_name      string
-    value           varint              self.remove != 1
-""")
-protocol(47).state(PLAY).from_server(0x3e, "Teams", """
-    team_name           string
-    mode                byte
-    display_name        string              self.mode in (0, 2)
-    prefix              string              self.mode in (0, 2)
-    suffix              string              self.mode in (0, 2)
-    friendly_fire       byte                self.mode in (0, 2)
-    named_tag_visible   string              self.mode in (0, 2)
-    color               byte                self.mode in (0, 2) 
-    players             varint_string_array self.mode in (0, 3, 4)
-""")
-protocol(47).state(PLAY).from_server(0x3f, "PluginMessage", """
-    channel         string
-    data            bytes_exhaustive
-""")
-protocol(47).state(PLAY).from_server(0x41, "ServerDifficulty", """
-    difficulty      ubyte
-""")
-protocol(47).state(PLAY).from_server(0x42, "CombatEvent", """
-    event           ubyte
-    duration        varint              self.event == 1
-    end_eid         int                 self.event == 1
-    player_id       varint              self.event == 2
-    dead_eid        int                 self.event == 2
-    message         string              self.event == 2
-""")
-protocol(47).state(PLAY).from_server(0x43, "Camera", """
-    camera_id       varint
-""")
-protocol(47).state(PLAY).from_server(0x44, "WorldBorder", """
-    action          varint
-    x               double              self.action in (2, 3)
-    z               double              self.action in (2, 3)
-    old_radius      double              self.action in (1, 3)
-    new_radius      double              self.action in (0, 1, 3)
-    speed           varint              self.action in (1, 3)
-    boundary        varint              self.action == 3
-    warning_time    varint              self.action in (3, 4)
-    warning_blocks  varint              self.action in (3, 5)
-""")
-protocol(47).state(PLAY).from_server(0x45, "Title", """
-    action          varint
-    text            json                self.action in (0, 1)
-    fade_in         int                 self.action == 2
-    stay            int                 self.action == 2
-    fade_out        int                 self.action == 2
-""")
-protocol(47).state(PLAY).from_server(0x46, "SetCompression", """
-    threshold       varint
-""")
-protocol(47).state(PLAY).from_server(0x47, "PlayerListHeaderFooter", """
-    header          json
-    footer          json
-""")
-protocol(47).state(PLAY).from_server(0x48, "ResourcePackSend", """
-    url             string
-    hash            string
-""")
-protocol(47).state(PLAY).from_server(0x49, "UpdateEntityNBT", """
-    eid             varint
-    nbt             short_byte_array
-""")
-#---------------------------------------------------
-protocol(47).state(PLAY).from_client(0x00, "KeepAlive", """
-    keepalive_id    varint 
-""")
-protocol(47).state(PLAY).from_client(0x02, "UseEntity", """
-    target          varint
-    type            varint
-    target_x        float               self.type == 2
-    target_y        float               self.type == 2
-    target_z        float               self.type == 2
-""")
-protocol(47).state(PLAY).from_client(0x04, "PlayerPosition", """
-    x               double
-    y               double
-    z               double
-    on_ground       bool
-""")
-protocol(47).state(PLAY).from_client(0x06, "PlayerPositionAndLook", """
-    x               double
-    y               double
-    z               double
-    yaw             float
-    pitch           float
-    on_ground       bool
-""")
-protocol(47).state(PLAY).from_client(0x07, "PlayerDigging", """
-    status          byte
-    location        position_packed
-    face            byte
-""")
-protocol(47).state(PLAY).from_client(0x08, "BlockPlacement", """
-    location        position_packed
-    direction       byte
-    held_item       slot_1_8
-    cursor_x        byte
-    cursor_y        byte
-    cursor_z        byte
-""")
-protocol(47).state(PLAY).from_client(0x0a, "Animation")
-protocol(47).state(PLAY).from_client(0x0b, "EntityAction", """
-    eid             varint
-    action_id       ubyte
-    jump_boost      varint
-""")
-protocol(47).state(PLAY).from_client(0x0c, "SteerVehicle", """
-    sideways        float
-    forward         float
-    flags           ubyte
-""")
-protocol(47).state(PLAY).from_client(0x0e, "ClickWindow", """
-    window_id       ubyte
-    slot            short
-    button          byte
-    action_num      short
-    mode            byte
-    clicked_item    slot_1_8
-""")
-protocol(47).state(PLAY).from_client(0x10, "CreativeInventoryAction", """
-    slot            short
-    clicked_item    slot_1_8
-""")
-protocol(47).state(PLAY).from_client(0x12, "UpdateSign", """
-    location        position_packed
-    line1           json
-    line2           json
-    line3           json
-    line4           json
-""")
-protocol(47).state(PLAY).from_client(0x14, "TabComplete", """
-    text            string
-    has_position    bool
-    location        position_packed     self.has_position
-""")
-protocol(47).state(PLAY).from_client(0x15, "ClientSettings", """
-    locale          string
-    view_distance   byte
-    chat_flags      byte
-    chat_colors     bool
-    displayed_skin  ubyte
-""")
-protocol(47).state(PLAY).from_client(0x16, "ClientStatus", """
-    action_id       ubyte
-""")
-protocol(47).state(PLAY).from_client(0x17, "PluginMessage", """
-    channel         string
-    data            varint_byte_array
-""")
-protocol(47).state(PLAY).from_client(0x18, "Spectate", """
-    target_player   string
-""")
-protocol(47).state(PLAY).from_client(0x19, "ResourcePackStatus", """
-    hash            string
-    result          varint
-""")
