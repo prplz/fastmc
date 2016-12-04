@@ -75,6 +75,20 @@ protocol(47).state(PLAY).from_server(0x0d, "CollectItem", """
     collected_eid   varint
     collector_eid   varint
 """)
+protocol(47).state(PLAY).from_server(0x0f, "SpawnMob", """
+    eid             varint
+    type            ubyte
+    x               int32
+    y               int32
+    z               int32
+    pitch           ubyte
+    head_pitch      ubyte
+    yaw             ubyte
+    velocity_x      short
+    velocity_y      short
+    velocity_z      short
+    metadata        metadata_1_8
+""")
 protocol(47).state(PLAY).from_server(0x10, "SpawnPainting", """
     eid             varint
     title           string
@@ -148,7 +162,7 @@ protocol(47).state(PLAY).from_server(0x1f, "SetExperience", """
     level           varint
     total_exp       varint
 """)
-protocol(47).state(PLAY).from_server(0x20, "EntityProperty", """
+protocol(47).state(PLAY).from_server(0x20, "EntityProperties", """
     eid             varint
     properties      property_array_14w04a
 """)
@@ -224,7 +238,7 @@ protocol(47).state(PLAY).from_server(0x33, "UpdateSign", """
     line3           json
     line4           json
 """)
-protocol(47).state(PLAY).from_server(0x34, "Maps", """
+protocol(47).state(PLAY).from_server(0x34, "Map", """
     map_id          varint
     scale           byte
     icons           map_icons
@@ -264,7 +278,7 @@ protocol(47).state(PLAY).from_server(0x3e, "Teams", """
     prefix              string              self.mode in (0, 2)
     suffix              string              self.mode in (0, 2)
     friendly_fire       byte                self.mode in (0, 2)
-    named_tag_visible   string              self.mode in (0, 2)
+    name_tag_visible    string              self.mode in (0, 2)
     color               byte                self.mode in (0, 2)
     players             varint_string_array self.mode in (0, 3, 4)
 """)

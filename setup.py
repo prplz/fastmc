@@ -8,6 +8,6 @@ setup(
     author_email = 'fw@dividuum.de',
     packages = ['fastmc'],
     license = 'BSD2',
-    install_requires = ['requests', 'pycrypto', 'simplejson'],
+    install_requires = ['requests', 'pycrypto', 'simplejson', 'gevent'],
     zip_safe = True,
 )

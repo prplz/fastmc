@@ -57,7 +57,7 @@ protocol(0).state(PLAY).from_server(0x01, "JoinGame", """
     max_players     ubyte
     level_type      string
 """)
-protocol(0).state(PLAY).from_server(0x02, "ChatMesage", """
+protocol(0).state(PLAY).from_server(0x02, "ChatMessage", """
     chat            json
 """)
 protocol(0).state(PLAY).from_server(0x03, "TimeUpdate", """
@@ -338,7 +338,7 @@ protocol(0).state(PLAY).from_server(0x2f, "SetSlot", """
     slot            short
     item            slot
 """)
-protocol(0).state(PLAY).from_server(0x30, "WindowItem", """
+protocol(0).state(PLAY).from_server(0x30, "WindowItems", """
     window_id       ubyte
     slots           slot_array
 """)
@@ -361,7 +361,7 @@ protocol(0).state(PLAY).from_server(0x33, "UpdateSign", """
     line3           string
     line4           string
 """)
-protocol(0).state(PLAY).from_server(0x34, "Maps", """
+protocol(0).state(PLAY).from_server(0x34, "Map", """
     map_id          varint
     data            short_byte_array
 """)
@@ -385,7 +385,7 @@ protocol(0).state(PLAY).from_server(0x38, "PlayerListItem", """
     online          bool
     ping            short
 """)
-protocol(0).state(PLAY).from_server(0x39, "PlayerAbility", """
+protocol(0).state(PLAY).from_server(0x39, "PlayerAbilities", """
     flags           byte
     flying_speed    float
     walking_speed   float

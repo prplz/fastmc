@@ -28,15 +28,17 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import logging
+import math
 import os
 import re
 from array import array
 from cStringIO import StringIO
 from collections import namedtuple
 from itertools import izip
-from struct import pack, unpack, Struct
+from struct import Struct, pack, unpack
 
-from simplejson import loads as json_loads, dumps as json_dumps
+from simplejson import dumps as json_dumps
+from simplejson import loads as json_loads
 
 log = logging.getLogger(__name__)
 
@@ -304,7 +306,7 @@ def read_int8(b):
 
 
 def write_int8(b, value):
-    write_int(b, int(value * 8))
+    write_int(b, math.floor(value * 8))
 
 
 def read_int32(b):
@@ -312,7 +314,7 @@ def read_int32(b):
 
 
 def write_int32(b, value):
-    write_int(b, int(value * 32))
+    write_int(b, math.floor(value * 32))
 
 
 def read_byte32(b):
@@ -320,7 +322,15 @@ def read_byte32(b):
 
 
 def write_byte32(b, value):
-    write_byte(b, int(value * 32))
+    write_byte(b, math.floor(value * 32))
+
+
+def read_short4096(b):
+    return read_short(b) / 4096.0
+
+
+def write_short4096(b, value):
+    write_short(b, math.floor(value * 4096))
 
 
 def read_short_byte_array(b):
@@ -603,6 +613,17 @@ META_WRITERS_1_8 = {
 }
 read_metadata_1_8, write_metadata_1_8 = make_metadata_pair(META_READERS_1_8, META_WRITERS_1_8)
 
+
+# TODO
+def read_metadata_1_9():
+    raise NotImplementedError('Metadata reader/writer for 1.9 has not yet been implemented')
+
+
+# TODO
+def write_metadata_1_9():
+    raise NotImplementedError('Metadata reader/writer for 1.9 has not yet been implemented')
+
+
 Property = namedtuple("Property", "value modifiers")
 Modifier = namedtuple("Modifier", "uuid amount operation")
 
@@ -643,7 +664,7 @@ def read_property_array_14w04a(b):
         value = read_double(b)
         num_modifiers = read_varint(b)
         modifiers = []
-        for _ in xrange(num_modifiers):
+        for __ in xrange(num_modifiers):
             msl, lsl, amount, operation = unpack(">QQdb", b.read(25))
             modifiers.append(Modifier(msl << 64 | lsl, amount, operation))
         properties[key] = Property(value, modifiers)
@@ -1121,9 +1142,10 @@ PRIMITIVES = {
     'long': ('q', 8, None, None),
     'float': ('f', 4, None, None),
     'double': ('d', 8, None, None),
-    'int8': ('i', 4, "%s / 8.0", "int(%s * 8)"),
-    'int32': ('i', 4, "%s / 32.0", "int(%s * 32)"),
-    'byte32': ('b', 1, "%s / 32.0", "int(%s * 32)"),
+    'int8': ('i', 4, "%s / 8.0", "math.floor(%s * 8)"),
+    'int32': ('i', 4, "%s / 32.0", "math.floor(%s * 32)"),
+    'byte32': ('b', 1, "%s / 32.0", "math.floor(%s * 32)"),
+    'short4096': ('H', 2, "%s / 4096.0", "math.floor(%s * 4096)")
 }
 
 
@@ -1192,6 +1214,7 @@ def make_packet_type(protocol_version, pkt_id, pkt_name, desc):
         code.add("__slots__ = %s" % (
             ", ".join('"%s"' % name for name, parser, condition in fields)))
     code.add("id = %s" % pkt_id)
+    code.add("src = '''%s'''" % desc)
 
     code.add("@classmethod")
     signature = ["cls"]
