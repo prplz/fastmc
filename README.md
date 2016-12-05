@@ -1,26 +1,3 @@
-## fastmc - A fast Minecraft 1.7/1.8 protocol library
+I'm updating this to 1.9/1.10/1.11 for my own use, not everything is implemented yet and it is mostly untested.
 
-For my project miners-movies.com I needed a fast and reliable
-parser / writer for the Minecraft protocol. This library is
-the result. 
-
-### Installing
-
-Clone this repository, then do
-
-    python setup.py develop
-
-or
-    
-    python setup.py install
-
-### Dependencies
-
- * Python 2.7 (I didn't try Python 3)
- * pycrypto
- * simplejson
- * requests
-
-### Usage
-
-See the examples in the `examples` directory.
+https://github.com/dividuum/fastmc
