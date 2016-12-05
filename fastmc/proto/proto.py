@@ -1470,6 +1470,16 @@ class Endpoint(object):
         self._state_packets = self._protocol.get_packets(state, self._side)
         log.debug("endpoint switch to state %d" % (self._state))
 
+    def read_raw(self, buf):
+        raw = read_raw(buf, self._compression_threshold)
+        if raw is None:
+            return None, None
+        pkt_id = read_varint(raw)
+        return pkt_id, raw
+
+    def parse(self, pkt_id, pkt_raw):
+        return self._state_packets[pkt_id].parse(pkt_raw)
+
     def read(self, buf):
         raw = read_raw(buf, self._compression_threshold)
         if raw is None:
