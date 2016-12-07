@@ -198,7 +198,7 @@ def read_bytes_exhaustive(b):
     # ugly hack for plugin message in protocol version 47:
     # The value doesn't have a size prefix, so you have to
     # to read all remaining bytes here. *barf*
-    return b.read(10000000000)
+    return b.read(2147483647)  # Maximum packet length
 
 
 def write_bytes_exhaustive(b, string):
