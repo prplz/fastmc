@@ -6,7 +6,7 @@ setup(
     description = 'Fast Minecraft Protocol Parser/Writer',
     author = 'Florian Wesch',
     author_email = 'fw@dividuum.de',
-    packages = ['fastmc'],
+    packages = ['fastmc', 'fastmc.proto'],
     license = 'BSD2',
     install_requires = ['requests', 'pycrypto', 'simplejson', 'gevent'],
     zip_safe = True,
